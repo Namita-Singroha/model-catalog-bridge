@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-resty/resty/v2"
+	serverapiv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	serverapiv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	"github.com/kserve/kserve/pkg/constants"
 	"github.com/kubeflow/model-registry/pkg/openapi"
@@ -79,6 +80,12 @@ func NewControllerManager(ctx context.Context, cfg *rest.Config, options ctrl.Op
 		return nil, err
 	}
 	if err := serverapiv1beta1.AddToScheme(options.Scheme); err != nil {
+		return nil, err
+	}
+	if err := serverapiv1alpha1.AddToScheme(options.Scheme); err != nil {
+		return nil, err
+	}
+	if err := serverapiv1alpha1.AddLLMInferenceServiceToScheme(options.Scheme); err != nil {
 		return nil, err
 	}
 
@@ -266,6 +273,22 @@ func SetupController(ctx context.Context, mgr ctrl.Manager, cfg *rest.Config, pp
 		WithOptions(controller.Options{MaxConcurrentReconciles: 32}).
 		WithEventFilter(filter).
 		Complete(reconciler)
+	if err != nil {
+		return err
+	}
+
+	llmReconciler := &LLMInferenceServiceReconcile{
+		client:           mgr.GetClient(),
+		scheme:           mgr.GetScheme(),
+		storage:          reconciler.storage,
+		format:           reconciler.format,
+		defaultLifecycle: reconciler.defaultLifecycle,
+		defaultOwner:     reconciler.defaultOwner,
+	}
+	err = ctrl.NewControllerManagedBy(mgr).For(&serverapiv1alpha1.LLMInferenceService{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 32}).
+		WithEventFilter(filter).
+		Complete(llmReconciler)
 	if err != nil {
 		return err
 	}
@@ -823,6 +846,19 @@ func (r *RHOAINormalizerReconcile) innerStart(ctx context.Context, buf *bytes.Bu
 		}
 	}
 
+	// Also track LLMInferenceService keys so they are not pruned from the current keyset
+	llmList := &serverapiv1alpha1.LLMInferenceServiceList{}
+	err = r.client.List(ctx, llmList, listOptions)
+	if err != nil {
+		controllerLog.Error(err, "error listing LLMInferenceServices")
+	}
+	for _, llmis := range llmList.Items {
+		importKey, _ := util.BuildImportKeyAndURI(util.SanitizeName(llmis.Namespace), util.SanitizeName(llmis.Name), r.format)
+		klog.V(4).Infof("innerStart importKey %s for LLMInferenceService %s:%s format %v",
+			importKey, llmis.Namespace, llmis.Name, r.format)
+		keys = append(keys, importKey)
+	}
+
 	rc := 0
 	msg := ""
 	rc, msg, err = r.storage.PostCurrentKeySet(keys)
@@ -875,4 +911,75 @@ func (r *RHOAINormalizerReconcile) innerStartCallBackstagePrinters(ctx context.C
 		return err
 	}
 	return nil
+}
+
+// LLMInferenceServiceReconcile reconciles LLMInferenceService CRs and pushes
+// them into the storage-rest sidecar so they appear in the Dev Hub catalog.
+type LLMInferenceServiceReconcile struct {
+	client           client.Client
+	scheme           *runtime.Scheme
+	storage          *storage.BridgeStorageRESTClient
+	format           types2.NormalizerFormat
+	defaultLifecycle string
+	defaultOwner     string
+}
+
+func (r *LLMInferenceServiceReconcile) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	llmis := &serverapiv1alpha1.LLMInferenceService{}
+	name := types.NamespacedName{Namespace: request.Namespace, Name: request.Name}
+	klog.V(4).Infof("LLMInferenceServiceReconcile entry %s", name.String())
+
+	err := r.client.Get(ctx, name, llmis)
+	if err != nil && !errors.IsNotFound(err) {
+		return reconcile.Result{}, err
+	}
+
+	// On delete — nothing to do, storage-rest handles cleanup via currentkeyset
+	if err != nil {
+		klog.V(4).Infof("LLMInferenceServiceReconcile not found (deleted) %s", name.String())
+		return reconcile.Result{}, nil
+	}
+
+	// Skip stopped models
+	ann := llmis.Annotations
+	if ann != nil {
+		if stop, ok := ann["serving.kserve.io/stop"]; ok && strings.EqualFold(stop, "true") {
+			klog.V(4).Infof("LLMInferenceServiceReconcile skipping stopped model %s", name.String())
+			return reconcile.Result{}, nil
+		}
+	}
+
+	// Wait for URL to be available
+	if len(llmis.Status.URL) == 0 {
+		klog.V(4).Infof("LLMInferenceServiceReconcile no URL yet for %s, requeuing", name.String())
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	// Build the ModelCatalog JSON using the proper schema populator
+	buf := bytes.NewBuffer(nil)
+	bwriter := bufio.NewWriter(buf)
+	if err := kserve.CallLLMBackstagePrinters(llmis, r.defaultLifecycle, r.defaultOwner, bwriter); err != nil {
+		return reconcile.Result{}, err
+	}
+	if err := bwriter.Flush(); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	importKey, _ := util.BuildImportKeyAndURI(
+		util.SanitizeName(llmis.Namespace),
+		util.SanitizeName(llmis.Name),
+		r.format,
+	)
+	ts := fmt.Sprintf("%d", llmis.CreationTimestamp.UnixMilli())
+
+	httpRC, msg, _, err := r.storage.UpsertModel(importKey, types2.KServeNormalizer, ts, "", nil, buf.Bytes())
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	if httpRC != http.StatusCreated && httpRC != http.StatusOK {
+		return reconcile.Result{}, fmt.Errorf("LLMInferenceServiceReconcile upsert returned rc %d: %s", httpRC, msg)
+	}
+
+	klog.Infof("LLMInferenceServiceReconcile upserted %s/%s -> key %s", llmis.Namespace, llmis.Name, importKey)
+	return reconcile.Result{}, nil
 }

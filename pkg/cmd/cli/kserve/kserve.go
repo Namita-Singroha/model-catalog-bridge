@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	serverapiv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	serverapiv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	"github.com/redhat-ai-dev/model-catalog-bridge/pkg/cmd/cli/backstage"
 	"github.com/redhat-ai-dev/model-catalog-bridge/pkg/config"
@@ -700,4 +701,98 @@ func (m *ModelCatalogPopulator) GetModelServer() *golang.ModelServer {
 		ms.Annotations = map[string]string{}
 	}
 	return ms
+}
+
+// LLMInferenceServicePopulator implements backstage.ModelCatalogPopulator for LLMInferenceService CRs.
+type LLMInferenceServicePopulator struct {
+	LLMIS     *serverapiv1alpha1.LLMInferenceService
+	Lifecycle string
+	Owner     string
+}
+
+func (p *LLMInferenceServicePopulator) GetModels() []golang.Model {
+	llmis := p.LLMIS
+	ann := llmis.Annotations
+
+	displayName := llmis.Name
+	if ann != nil {
+		if dn, ok := ann["openshift.io/display-name"]; ok && len(dn) > 0 {
+			displayName = dn
+		}
+	}
+
+	modelType := "generative"
+	if ann != nil {
+		if mt, ok := ann["opendatahub.io/model-type"]; ok && len(mt) > 0 {
+			modelType = mt
+		}
+	}
+
+	name := fmt.Sprintf("%s-%s", util.SanitizeName(llmis.Namespace), util.SanitizeName(llmis.Name))
+
+	tags := []string{"llm", "rhoai", "llminferenceservice", "model-type-" + modelType}
+
+	var artifactURL *string
+	if len(llmis.Spec.Model.URI) > 0 {
+		u := llmis.Spec.Model.URI
+		artifactURL = &u
+	}
+
+	model := golang.Model{
+		Name:                name,
+		Description:         fmt.Sprintf("LLM model %s in namespace %s (type: %s)", displayName, llmis.Namespace, modelType),
+		Lifecycle:           p.Lifecycle,
+		Owner:               p.Owner,
+		Tags:                tags,
+		ArtifactLocationURL: artifactURL,
+		Annotations: map[string]string{
+			backstage.MODEL_NAME:                        name,
+			"maas.opendatahub.io/namespace":             llmis.Namespace,
+			"maas.opendatahub.io/model-name":            llmis.Name,
+			"maas.opendatahub.io/inference-service-url": llmis.Status.URL,
+		},
+	}
+
+	return []golang.Model{model}
+}
+
+func (p *LLMInferenceServicePopulator) GetModelServer() *golang.ModelServer {
+	llmis := p.LLMIS
+	if len(llmis.Status.URL) == 0 {
+		return nil
+	}
+
+	name := fmt.Sprintf("%s-%s", util.SanitizeName(llmis.Namespace), util.SanitizeName(llmis.Name))
+
+	tags := []string{}
+	for k, v := range llmis.Labels {
+		tag := fmt.Sprintf("%s-%s", util.SanitizeName(k), util.SanitizeName(v))
+		tags = append(tags, util.SanitizeName(tag))
+	}
+
+	auth := false
+	ms := &golang.ModelServer{
+		Name:           name,
+		Description:    fmt.Sprintf("LLMInferenceService %s/%s", llmis.Namespace, llmis.Name),
+		Lifecycle:      p.Lifecycle,
+		Owner:          p.Owner,
+		Tags:           tags,
+		Authentication: &auth,
+		API: &golang.API{
+			URL:  llmis.Status.URL,
+			Type: golang.Openapi,
+			Spec: "TBD",
+		},
+	}
+	return ms
+}
+
+// CallLLMBackstagePrinters writes a ModelCatalog JSON for the given LLMInferenceService.
+func CallLLMBackstagePrinters(llmis *serverapiv1alpha1.LLMInferenceService, lifecycle, owner string, writer io.Writer) error {
+	pop := &LLMInferenceServicePopulator{
+		LLMIS:     llmis,
+		Lifecycle: lifecycle,
+		Owner:     owner,
+	}
+	return backstage.PrintModelCatalogPopulator(pop, writer)
 }

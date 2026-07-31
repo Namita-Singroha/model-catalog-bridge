@@ -1177,3 +1177,132 @@ func (in *WorkerSpec) DeepCopy() *WorkerSpec {
 	in.DeepCopyInto(out)
 	return out
 }
+
+// DeepCopyInto for LLMInferenceService
+func (in *LLMInferenceService) DeepCopyInto(out *LLMInferenceService) {
+	*out = *in
+	out.TypeMeta = in.TypeMeta
+	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	out.Spec = in.Spec
+	in.Status.DeepCopyInto(&out.Status)
+}
+
+func (in *LLMInferenceService) DeepCopy() *LLMInferenceService {
+	if in == nil {
+		return nil
+	}
+	out := new(LLMInferenceService)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *LLMInferenceService) DeepCopyObject() runtime.Object {
+	if c := in.DeepCopy(); c != nil {
+		return c
+	}
+	return nil
+}
+
+func (in *LLMInferenceServiceList) DeepCopyInto(out *LLMInferenceServiceList) {
+	*out = *in
+	out.TypeMeta = in.TypeMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	if in.Items != nil {
+		in, out := &in.Items, &out.Items
+		*out = make([]LLMInferenceService, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+}
+
+func (in *LLMInferenceServiceList) DeepCopy() *LLMInferenceServiceList {
+	if in == nil {
+		return nil
+	}
+	out := new(LLMInferenceServiceList)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *LLMInferenceServiceList) DeepCopyObject() runtime.Object {
+	if c := in.DeepCopy(); c != nil {
+		return c
+	}
+	return nil
+}
+
+func (in *LLMInferenceServiceModelRef) DeepCopyInto(out *LLMInferenceServiceModelRef) {
+	*out = *in
+}
+
+func (in *LLMInferenceServiceModelRef) DeepCopy() *LLMInferenceServiceModelRef {
+	if in == nil {
+		return nil
+	}
+	out := new(LLMInferenceServiceModelRef)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *LLMInferenceServiceSpec) DeepCopyInto(out *LLMInferenceServiceSpec) {
+	*out = *in
+	out.Model = in.Model
+	if in.Replicas != nil {
+		in, out := &in.Replicas, &out.Replicas
+		*out = new(int32)
+		**out = **in
+	}
+	if in.Router != nil {
+		in, out := &in.Router, &out.Router
+		*out = new(runtime.RawExtension)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.Template != nil {
+		in, out := &in.Template, &out.Template
+		*out = new(runtime.RawExtension)
+		(*in).DeepCopyInto(*out)
+	}
+}
+
+func (in *LLMInferenceServiceSpec) DeepCopy() *LLMInferenceServiceSpec {
+	if in == nil {
+		return nil
+	}
+	out := new(LLMInferenceServiceSpec)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *LLMInferenceServiceAddress) DeepCopyInto(out *LLMInferenceServiceAddress) {
+	*out = *in
+}
+
+func (in *LLMInferenceServiceAddress) DeepCopy() *LLMInferenceServiceAddress {
+	if in == nil {
+		return nil
+	}
+	out := new(LLMInferenceServiceAddress)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *LLMInferenceServiceStatus) DeepCopyInto(out *LLMInferenceServiceStatus) {
+	*out = *in
+	in.Status.DeepCopyInto(&out.Status)
+	if in.Addresses != nil {
+		in, out := &in.Addresses, &out.Addresses
+		*out = make([]LLMInferenceServiceAddress, len(*in))
+		copy(*out, *in)
+	}
+}
+
+func (in *LLMInferenceServiceStatus) DeepCopy() *LLMInferenceServiceStatus {
+	if in == nil {
+		return nil
+	}
+	out := new(LLMInferenceServiceStatus)
+	in.DeepCopyInto(out)
+	return out
+}
+

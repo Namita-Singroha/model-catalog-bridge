@@ -24,7 +24,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 
 	"github.com/kserve/kserve/pkg/constants"
@@ -37,6 +39,9 @@ var (
 	// SchemeGroupVersion is group version used to register these objects
 	SchemeGroupVersion = schema.GroupVersion{Group: constants.KServeAPIGroupName, Version: APIVersion}
 
+	// SchemeGroupVersionV1alpha2 is the group version for LLMInferenceService which uses v1alpha2
+	SchemeGroupVersionV1alpha2 = schema.GroupVersion{Group: constants.KServeAPIGroupName, Version: "v1alpha2"}
+
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme
 	SchemeBuilder = &scheme.Builder{GroupVersion: SchemeGroupVersion}
 
@@ -47,6 +52,19 @@ var (
 // Resource is required by pkg/client/listers/...
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
+}
+
+// AddLLMInferenceServiceToScheme registers LLMInferenceService types under the
+// v1alpha2 GroupVersion, which is the actual API version used on the cluster.
+// metav1.AddToGroupVersion is required so the scheme has ListOptions, GetOptions,
+// etc. registered for v1alpha2 — without it the cache reflector cannot list.
+func AddLLMInferenceServiceToScheme(s *runtime.Scheme) error {
+	s.AddKnownTypes(SchemeGroupVersionV1alpha2,
+		&LLMInferenceService{},
+		&LLMInferenceServiceList{},
+	)
+	metav1.AddToGroupVersion(s, SchemeGroupVersionV1alpha2)
+	return nil
 }
 
 func init() {
