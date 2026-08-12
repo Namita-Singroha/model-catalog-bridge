@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	serverapiv1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	serverapiv1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/redhat-ai-dev/model-catalog-bridge/pkg/cmd/cli/kubeflowmodelregistry"
@@ -34,6 +35,7 @@ import (
 func TestReconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = serverapiv1beta1.AddToScheme(scheme)
+	_ = serverapiv1alpha1.AddLLMInferenceServiceToScheme(scheme)
 	kts1 := kfmr.CreateGetServerWithInference(t)
 	defer kts1.Close()
 	kts2 := kfmr.CreateGetServer(t)
@@ -217,6 +219,7 @@ func TestReconcile(t *testing.T) {
 func TestStart(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = serverapiv1beta1.AddToScheme(scheme)
+	_ = serverapiv1alpha1.AddLLMInferenceServiceToScheme(scheme)
 	kts1 := kfmr.CreateGetServerWithInference(t)
 	defer kts1.Close()
 	kts2 := kfmr.CreateGetServer(t)
@@ -400,6 +403,7 @@ func TestStart(t *testing.T) {
 func TestStart_JsonArray_MultiVersion(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = serverapiv1beta1.AddToScheme(scheme)
+	_ = serverapiv1alpha1.AddLLMInferenceServiceToScheme(scheme)
 	kts1 := kfmr.CreateGetServerWithInference(t)
 	defer kts1.Close()
 	brts := location.CreateBridgeLocationServer(t)
@@ -503,6 +507,7 @@ func TestStart_JsonArray_MultiVersion(t *testing.T) {
 func TestStartArchived(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = serverapiv1beta1.AddToScheme(scheme)
+	_ = serverapiv1alpha1.AddLLMInferenceServiceToScheme(scheme)
 	kts1 := kfmr.CreateGetServerArchived(t)
 	defer kts1.Close()
 	brts := location.CreateBridgeLocationServer(t)

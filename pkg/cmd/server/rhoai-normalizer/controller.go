@@ -279,7 +279,6 @@ func SetupController(ctx context.Context, mgr ctrl.Manager, cfg *rest.Config, pp
 
 	llmReconciler := &LLMInferenceServiceReconcile{
 		client:           mgr.GetClient(),
-		scheme:           mgr.GetScheme(),
 		storage:          reconciler.storage,
 		format:           reconciler.format,
 		defaultLifecycle: reconciler.defaultLifecycle,
@@ -821,6 +820,7 @@ func (r *RHOAINormalizerReconcile) innerStart(ctx context.Context, buf *bytes.Bu
 	err := r.client.List(ctx, isList, listOptions)
 	if err != nil {
 		controllerLog.Error(err, "error listing kserve inferenceservices")
+		return
 	}
 	for _, is := range isList.Items {
 		skip := false
@@ -851,6 +851,7 @@ func (r *RHOAINormalizerReconcile) innerStart(ctx context.Context, buf *bytes.Bu
 	err = r.client.List(ctx, llmList, listOptions)
 	if err != nil {
 		controllerLog.Error(err, "error listing LLMInferenceServices")
+		return
 	}
 	for _, llmis := range llmList.Items {
 		importKey, _ := util.BuildImportKeyAndURI(util.SanitizeName(llmis.Namespace), util.SanitizeName(llmis.Name), r.format)
@@ -917,7 +918,6 @@ func (r *RHOAINormalizerReconcile) innerStartCallBackstagePrinters(ctx context.C
 // them into the storage-rest sidecar so they appear in the Dev Hub catalog.
 type LLMInferenceServiceReconcile struct {
 	client           client.Client
-	scheme           *runtime.Scheme
 	storage          *storage.BridgeStorageRESTClient
 	format           types2.NormalizerFormat
 	defaultLifecycle string
@@ -952,7 +952,7 @@ func (r *LLMInferenceServiceReconcile) Reconcile(ctx context.Context, request re
 	// Wait for URL to be available
 	if len(llmis.Status.URL) == 0 {
 		klog.V(4).Infof("LLMInferenceServiceReconcile no URL yet for %s, requeuing", name.String())
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Build the ModelCatalog JSON using the proper schema populator

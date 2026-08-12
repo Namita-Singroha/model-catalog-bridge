@@ -715,14 +715,11 @@ func (p *LLMInferenceServicePopulator) GetModels() []golang.Model {
 	ann := llmis.Annotations
 
 	displayName := llmis.Name
+	modelType := "generative"
 	if ann != nil {
 		if dn, ok := ann["openshift.io/display-name"]; ok && len(dn) > 0 {
 			displayName = dn
 		}
-	}
-
-	modelType := "generative"
-	if ann != nil {
 		if mt, ok := ann["opendatahub.io/model-type"]; ok && len(mt) > 0 {
 			modelType = mt
 		}
